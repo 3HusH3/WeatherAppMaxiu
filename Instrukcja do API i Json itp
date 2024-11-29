@@ -1,0 +1,156 @@
+Aby stworzyć aplikację w oparciu o Windows Forms (Forms) do wyświetlania aktualnych warunków atmosferycznych przy użyciu API OpenMeteo, musimy wykonać następujące kroki:
+
+Zarejestrować się w OpenMeteo API, aby uzyskać dostęp do aktualnych danych pogodowych.
+Używać HTTPClienta w aplikacji Windows Forms, aby pobrać dane pogodowe w formacie JSON.
+Parsers JSON - przetworzyć dane JSON na wartości, które będą wyświetlane na formularzu.
+Za pomocą Timeru lub przycisku - na żądanie lub w określonych interwałach czasowych, wywołać zapytanie do API i zaktualizować dane na formularzu.
+Wizualizacja w Windows Forms - stworzymy etykiety, pola tekstowe, przyciski i inne kontrolki, które umożliwią wyświetlenie odpowiednich danych.
+Kroki realizacji aplikacji
+1. Tworzenie projektu Windows Forms
+Otwórz Visual Studio i utwórz nowy projekt Windows Forms (C#).
+
+2. Instalacja niezbędnych bibliotek
+Aby komunikować się z OpenMeteo API, użyjemy klasy HttpClient, która jest dostępna w .NET. Możesz także zainstalować bibliotekę Newtonsoft.Json do parsowania odpowiedzi JSON, ale .NET 6 i nowsze zawierają już wbudowany pakiet do serializacji/deserializacji JSON (System.Text.Json).
+
+Jeśli chcesz korzystać z Newtonsoft.Json, zainstaluj ją za pomocą NuGet:
+
+Kliknij prawym przyciskiem na projekt → "Manage NuGet Packages" → "Browse" → "Newtonsoft.Json" → Zainstaluj.
+3. Kod aplikacji
+FORM CS:
+
+using System;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using Newtonsoft.Json;
+
+namespace WeatherApp
+{
+    public partial class Form1 : Form
+    {
+        private static readonly HttpClient client = new HttpClient();
+        private string apiUrl = "https://api.open-meteo.com/v1/forecast";
+
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+        private async void FetchWeatherButton_Click(object sender, EventArgs e)
+        {
+            await GetWeatherDataAsync();
+        }
+
+        private async Task GetWeatherDataAsync()
+        {
+            try
+            {
+                // Lokalizacja - przykładowo Warszawa (50.06143, 19.93863)
+                string latitude = "52.2297";  // Warszawa
+                string longitude = "21.0122";
+                string url = $"{apiUrl}?latitude={latitude}&longitude={longitude}&current_weather=true&hourly=temperature_2m,humidity_2m,weathercode,wind_speed_10m,wind_direction_10m";
+
+                HttpResponseMessage response = await client.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+                string responseBody = await response.Content.ReadAsStringAsync();
+
+                // Parsowanie odpowiedzi JSON
+                var weatherData = JsonConvert.DeserializeObject<WeatherResponse>(responseBody);
+
+                // Wyświetlanie wyników
+                temperatureLabel.Text = $"Temperatura: {weatherData.CurrentWeather.Temperature}°C";
+                humidityLabel.Text = $"Wilgotność: {weatherData.CurrentWeather.Humidity}%";
+                weatherConditionLabel.Text = $"Pogoda: {GetWeatherConditionDescription(weatherData.CurrentWeather.WeatherCode)}";
+                windSpeedLabel.Text = $"Prędkość wiatru: {weatherData.CurrentWeather.WindSpeed} m/s";
+                windDirectionLabel.Text = $"Kierunek wiatru: {GetWindDirectionDescription(weatherData.CurrentWeather.WindDirection)}";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Błąd: {ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private string GetWeatherConditionDescription(int weatherCode)
+        {
+            // Mapowanie kodu WMO na opis
+            return weatherCode switch
+            {
+                0 => "Pogodnie",
+                1 => "Częściowe zachmurzenie",
+                2 => "Zachmurzenie",
+                3 => "Deszcz",
+                45 => "Mgła",
+                48 => "Szron",
+                _ => "Nieznane",
+            };
+        }
+
+        private string GetWindDirectionDescription(int direction)
+        {
+            // Zaokrąglenie kierunku wiatru
+            int roundedDirection = (direction + 22) / 45 * 45; // Zaokrąglamy do 45°
+            return roundedDirection switch
+            {
+                0 => "Północ",
+                45 => "Północny-Wschód",
+                90 => "Wschód",
+                135 => "Południowy-Wschód",
+                180 => "Południe",
+                225 => "Południowy-Zachód",
+                270 => "Zachód",
+                315 => "Północny-Zachód",
+                _ => "Nieznany",
+            };
+        }
+    }
+
+    public class WeatherResponse
+    {
+        [JsonProperty("current_weather")]
+        public CurrentWeather CurrentWeather { get; set; }
+    }
+
+    public class CurrentWeather
+    {
+        [JsonProperty("temperature")]
+        public double Temperature { get; set; }
+
+        [JsonProperty("humidity")]
+        public int Humidity { get; set; }
+
+        [JsonProperty("weathercode")]
+        public int WeatherCode { get; set; }
+
+        [JsonProperty("wind_speed")]
+        public double WindSpeed { get; set; }
+
+        [JsonProperty("wind_direction")]
+        public int WindDirection { get; set; }
+    }
+}
+
+4. Przygotowanie interfejsu użytkownika (UI)
+W aplikacji Forms, stwórz kontrolki na formularzu:
+
+Labels:
+
+temperatureLabel - aby wyświetlić temperaturę.
+humidityLabel - aby wyświetlić wilgotność.
+weatherConditionLabel - aby wyświetlić pogodę (WMO).
+windSpeedLabel - aby wyświetlić prędkość wiatru.
+windDirectionLabel - aby wyświetlić kierunek wiatru.
+Button:
+
+FetchWeatherButton - aby wywołać pobieranie danych pogodowych po kliknięciu.
+Timer (opcjonalnie): Jeśli chcesz, aby aplikacja automatycznie pobierała dane co jakiś czas, dodaj komponent Timer na formularz i ustaw interwał w milisekundach (np. co 60000 ms = 1 minuta). Skonfiguruj zdarzenie Tick, aby w odpowiedzi na upływ czasu wywołać metodę GetWeatherDataAsync().
+
+5. Finalizacja
+Po uruchomieniu aplikacji użytkownik będzie mógł kliknąć przycisk, aby pobrać dane o pogodzie, a te zostaną wyświetlone w odpowiednich etykietach na formularzu. Możesz też ustawić timer, by dane były pobierane automatycznie w zadanych odstępach czasu.
+
+Podsumowanie
+W tej aplikacji zrealizowaliśmy:
+
+Pobieranie danych pogodowych z API OpenMeteo.
+Wyświetlanie temperatury, wilgotności, warunków atmosferycznych, prędkości i kierunku wiatru.
+Obsługę kodów WMO do określania warunków pogodowych.
+Automatyczne odświeżanie danych lub wywołanie pobierania po kliknięciu przycisku.
